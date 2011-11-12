@@ -172,8 +172,6 @@ describe "couchbone", ->
       couch_options:
         db: db
         view: "#{TestTools.ddoc_name}/tree"
-        changes:
-          type: 'gonzo'
 
     collection = new SimpleCollection()
     collection.fetch
@@ -193,16 +191,15 @@ describe "couchbone", ->
         db: db
         view: "#{TestTools.ddoc_name}/tree"
         include_docs: true
-        changes:
-          type: 'gonzo'
 
     collection = new SimpleCollection()
     collection.fetch
       success: -> fulfilled = true      
 
     waitsFor -> fulfilled == true
-    runs -> (expect collection.models[0].attributes.doctype).toEqual "project"
-
+    runs -> 
+      (expect collection.models[0].attributes.doctype).toEqual "project"
+      (expect collection.models[2].attributes.doctype).toEqual "file"
 
   it "should fetch collections (couchdb lists)", ->
     db = CouchBone.db TestTools.db_name
@@ -214,8 +211,6 @@ describe "couchbone", ->
         db: db
         view: "#{TestTools.ddoc_name}/tree"
         list: 'simple'
-        changes:
-          type: 'gonzo'
 
     collection = new SimpleCollection()
     collection.fetch
@@ -226,28 +221,34 @@ describe "couchbone", ->
       (expect collection.length).toBeGreaterThan 10
 
 
-  it "should ensure that collections automatically subscribe to the changes feed", ->
+  it "should ensure that collections can sign up to a generic 'by' filtered changes feed", ->
     db = CouchBone.db TestTools.db_name
     fulfilled = false
-    class SimpleModel extends Backbone.Model  
-  
+    added = false
+    
+    class SimpleModel extends Backbone.Model
+      initialize: ->
+        @bind "add", -> 
+          added = true
+
     class SimpleCollection extends Backbone.Collection      
       model: SimpleModel
       couch_options:
         db: db
         view: "#{TestTools.ddoc_name}/tree"
         changes:
-          type: 'gonzo'
-  
-    # t = new CouchBone.ChangesFeed
-    db.new_changes_feed({})
-    
+          field: 'doctype'
+          by: 'gonzo'
+      
     collection = new SimpleCollection()
     collection.fetch
       success: -> fulfilled = true
   
     waitsFor -> fulfilled == true
-    runs -> (expect db.couch.uri).toEqual "http://127.0.0.1:5984/#{TestTools.db_name}/"
-     
-       
- 
+    runs -> 
+      TestTools.db.saveDoc { _id: "/Aoneone", doctype: "gonzo" }
+    
+    waitsFor -> added == true
+    runs -> 
+      (expect collection.models[12].attributes.doctype).toEqual "gonzo"
+      

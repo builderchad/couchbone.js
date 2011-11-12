@@ -14,9 +14,10 @@
 # 
 # 
 # 
-# view
-# list
-# show
+# view: "ddoc_name/view_name"
+# list: "list_func_name"
+# show: "show_func_name"
+# update: "update_func_name"
 # 
 ## The following is an automatic change feed setup using a generic "by" filter
 # changes: {
@@ -58,7 +59,7 @@ class CouchBone
     ops
 
   constructor: (factory_switch, @options) ->
-    throw "use 'CouchBone.db <db_name>' factory instead" if factory_switch != "__OVERRIDE__"
+    throw "use 'CouchBone.db <db_name>' factory instead" unless factory_switch == "__OVERRIDE__"
     @couch = $.couch.db @options.db
     @couch.uri = "#{@options.host}/#{@options.db}/"
 
@@ -66,38 +67,42 @@ class CouchBone
   # These are handled together to prevent wasted network connections.
   # Using a server side 'filter' will give back a new object (i.e. a sep. changes feed altogether)
   new_changes_feed: (strategy) ->
-    # console.log "ncf:", arguments.callee.caller
     if strategy.client_filter
       throw "not impl."
-      @db_wide_feed = new @ChangesFeed("__OVERRIDE__", @couch) unless @db_wide_feed
-      @db_wide_feed.add_handler(strategy.client_filter, strategy.client_handler)
+      @db_wide_feed = new CouchBone.ChangesFeed "__OVERRIDE__", @couch unless @db_wide_feed
+      @db_wide_feed.add_handler strategy.client_filter, strategy.client_handler
     else
-      new @ChangesFeed("__OVERRIDE__", @couch, strategy)
+      new CouchBone.ChangesFeed "__OVERRIDE__", @couch, strategy
 
   class @ChangesFeed
 
-    constructor: (factory_switch, @db, @filter)->
-      throw "Use couchbone instance '.new_changes_feed' factory instead" if factory_switch != "__OVERRIDE__"
+    constructor: (factory_switch, @db, @filter) ->
+      throw "Use couchbone instance '.new_changes_feed' factory instead" unless factory_switch == "__OVERRIDE__"
       throw "server filter not specified" unless @filter
       _.bindAll @, '_init_changes', '_on_changes'
-      @start_feed
+      @db.info
+        success: @_init_changes
 
     start_feed: ->
-      @couch.info success: @_init_changes
+      @db.info
+        success: @_init_changes
 
     stop_feed: ->
       @_changes.stop if @_changes
 
     _init_changes: (info) ->
+      # console.log "FF", @filter
       sequence = info.update_seq || 0
       # options = include_docs: true
       options = {}
-      if @filter and @filter.name
-        options.filter = @filter.name
-        (_.extend options, @filter.params) if @filter.params
-
+      if @filter and @filter.filter
+        options.filter = @filter.filter
+        # (_.extend options, @filter.params) if @filter.params
+        options.include_docs = true if @filter.include_docs
+      console.log "chngopt", options
       @_changes = @db.changes sequence, options
       @_changes.onChange @_on_changes
+      
 
     _on_changes: (changes) ->
       _.each changes.results, (result) =>
@@ -145,18 +150,27 @@ class Backbone.Collection extends Backbone.Collection
 
   couch_options: {}
 
-  initialize: -> 
-    @couchbone_feed_subscribe if @couch_options.auto_subscribe
+  initialize: ->
+    # _.bindAll @, 'couchbone_handle_feed_changes'
+    @couchbone_feed_subscribe() if @couch_options.changes
 
-  couchbone_handle_feed_changes: (result) ->
+  couchbone_handle_feed_changes: (result) =>
+    # console.log "wha", result
     model = @get result.id
+    # console.log "gah!", model, @
     if model?
       if result.deleted
         @remove model
       else
         model.set result.doc unless model.get("_rev") == result.doc._rev 
     else
-      @add result.doc unless result.deleted
+      # todo: check if there is a doc first!!
+      
+      if result.doc
+        console.log "its new + doc"
+        @add result.doc unless result.deleted
+      else
+        console.log "oops, no doc"
       
     # console.log "collchng - handle end"
 
@@ -164,9 +178,10 @@ class Backbone.Collection extends Backbone.Collection
     if @couch_options.db
       if @couch_options.changes.field
         feed_options =
-          filter: 'by'
+          filter: 'test/by'
           params: @couch_options.changes.field
           handler: @couchbone_handle_feed_changes
+          include_docs: true
       else if @couch_options.changes.filter
         feed_options =
           filter: @couch_options.changes.filter
@@ -174,8 +189,7 @@ class Backbone.Collection extends Backbone.Collection
           handler: @couch_options.changes.handler || @couchbone_handle_feed_changes
       else
         throw "changes specification has not been specified correctly"
-
-      @couch_options.db.new_changes_feed
+      @couch_options.db.new_changes_feed feed_options
       # _.bind @generic_handle_changes, @
 
   # If using a 'view' only then a design doc must be specified:
