@@ -97,7 +97,7 @@ class CouchBone
       options = {}
       if @filter and @filter.filter
         options.filter = @filter.filter
-        # (_.extend options, @filter.params) if @filter.params
+        (_.extend options, @filter.params) if @filter.params
         options.include_docs = true if @filter.include_docs
       console.log "chngopt", options
       @_changes = @db.changes sequence, options
@@ -179,7 +179,7 @@ class Backbone.Collection extends Backbone.Collection
       if @couch_options.changes.field
         feed_options =
           filter: 'test/by'
-          params: @couch_options.changes.field
+          params: { field_name: @couch_options.changes.field, field_value: @couch_options.changes.by }
           handler: @couchbone_handle_feed_changes
           include_docs: true
       else if @couch_options.changes.filter
