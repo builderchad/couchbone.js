@@ -1,0 +1,4 @@
+{
+    "name": "Jasmine tests for backbone-couchdb as a CouchApp",
+    "description": "Push this app using 'couchapp' (the main python one) and browse to index to view jasmine test results"
+}

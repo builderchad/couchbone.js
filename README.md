@@ -28,7 +28,7 @@ Current features
 - CRUD on models
 - Couchdb's 'show' and 'update' functions supported through modified jquery.couch.js
 - Read on collections
-- Changes feed by server side or client side filtering
+- Changes feed by server side filter (generic 'by' filter supported semi-automatically)
 - One CouchBone instance per database connection
 
 

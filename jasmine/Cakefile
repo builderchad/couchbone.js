@@ -1,0 +1,37 @@
+db = 'http://127.0.0.1:5984/couchbone'
+
+{spawn, exec} = require 'child_process'
+
+task 'watch', 'Watch coffeescript source files and build JS', (options) ->
+  runCommand = (name, args...) ->
+    proc =           spawn name, args
+    proc.stderr.on   'data', (buffer) -> console.log buffer.toString()
+    proc.stdout.on   'data', (buffer) -> console.log buffer.toString()
+    proc.on          'exit', (status) -> process.exit(1) if status isnt 0
+  runCommand 'coffee', '-wc', '_attachments'
+  runCommand 'coffee', '-wcb', '../couchbone.coffee', 'views', 'shows', 'lists', 'updates', 'filters'
+
+task 'donk', 'DELETEs database and pushes everything again', (options) ->
+  runCommand = (name, args...) ->
+    proc =           spawn name, args
+    proc.stderr.on   'data', (buffer) -> console.log buffer.toString()
+    proc.stdout.on   'data', (buffer) -> console.log buffer.toString()
+    proc.on          'exit', (status) -> process.exit(1) if status isnt 0
+  runCommand 'curl', '-X', 'DELETE', db
+  runCommand 'curl', '-X', 'PUT', db
+
+task 'push', 'Calls couchapp to push app to couchdb', (options) ->
+  runCommand = (name, args...) ->
+    proc =           spawn name, args
+    proc.stderr.on   'data', (buffer) -> console.log buffer.toString()
+    proc.stdout.on   'data', (buffer) -> console.log buffer.toString()
+    proc.on          'exit', (status) -> process.exit(1) if status isnt 0
+  runCommand 'couchapp', 'push'
+
+task 'data', 'Load fixtures/data.json into couchdb', (options) ->
+  runCommand = (name, args...) ->
+    proc =           spawn name, args
+    proc.stderr.on   'data', (buffer) -> console.log buffer.toString()
+    proc.stdout.on   'data', (buffer) -> console.log buffer.toString()
+    proc.on          'exit', (status) -> process.exit(1) if status isnt 0
+  runCommand 'curl', '-d', '@fixtures/data.json', '-X', 'POST', '-H', 'Content-Type: application/json', db + '/_bulk_docs'

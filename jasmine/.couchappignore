@@ -1,0 +1,6 @@
+[
+".+\\.coffee$",
+".+\\-data\\.json",
+"Cakefile",
+"fixtures"
+]
