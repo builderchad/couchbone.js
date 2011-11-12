@@ -43,7 +43,7 @@ Bugs to be fixed and future features
 Testing using the Jasmine couchapp
 ----------------------------------
 
-Soon...
+See the README.md file in the jasmine/ directory
 
 
 Usage
