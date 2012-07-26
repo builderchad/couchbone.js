@@ -2,52 +2,48 @@
 couchbone.js
 ============
 
-A backbone.js to couchdb connector and feed handler.  Uses the global namespace 'CouchBone'.
+AMD Module: Couchbone
 
-Some code and ideas taken from these other great connectors:
+A rewrite and simplification of jquery.couch.js combined with couch features for backbone.js
 
-* Jan Monschke https://github.com/janmonschke/backbone-couchdb,
-* Andrzej Sliwa https://github.com/andrzejsliwa/backbone-couch,
-* Thomas Rampelberg https://github.com/pyronicide/backbone.couchdb.js
+NOTE: Supports CouchDB 1.2+ only
 
+Code and ideas from these other libs:
+- Jan Monschke https://github.com/janmonschke/backbone-couchdb
+- Andrzej Sliwa https://github.com/andrzejsliwa/backbone-couch
+- Thomas Rampelberg https://github.com/pyronicide/backbone.couchdb.js
 
-Extends Backbone.Model, Backbone.Collection, Backbone.sync and relies on a modified version
-of jquery.couch.js (updated to handle 'show' and 'update' functions).
+Couchbone - Module containing constructors for CouchDB connection and changes feed objects
+Couchbone.DB - Factory which creates flyweight singletons (DbFly) for each unique db connection
+	(Couchbone.DbFly - Flyweight objects for database specific services)
+	(Couchbone.DbFly.prototype.admin - Admin functions are hidden in the 'admin' object within the prototype. e.g. mydb.admin.allDesignDocs())
+Couchbone.ChangesFeed - CouchDB _changes publisher/subscribe service (use 'new')
+	
+Creates Couchbone.Model, Couchbone.Collection and Couchbone.CompositeCollection
   
 Dependencies
 ------------
 
+* [jQuery](http://www.jquery.com/)
 * [Backbone.js](https://github.com/documentcloud/backbone) (>= 0.5.1)
 * [Underscore.js](https://github.com/documentcloud/underscore)
-* [jquery.couch.js *modified version included*] (https://github.com/apache/couchdb/blob/trunk/share/www/script/jquery.couch.js)
-* [jQuery](http://www.jquery.com/)
 
 Current features
 ----------------
 
 - CRUD on models
-- Couchdb's 'show' and 'update' functions supported through modified jquery.couch.js
+- Couchdb's 'show' and 'update' functions supported
 - Read on collections
-- Changes feed by server side filter (generic 'by' filter supported semi-automatically)
-- One CouchBone instance per database connection
+- Composite couchdb views handled by CompositeCollection using simple ODM
+- Changes feed by server side filter 
+- Flyweight instances per database connection
+- (TODO: generic 'by' filter supported semi-automatically)
+- (TODO: Add support for a generic id filter in the "global feed handler")
 
-
-Bugs to be fixed and future features
---------------------------------------
-
-- Add support for multiple db's with exactly same name (on dif. hosts) (its a simple factory ATM)
-- Finish off code to support a "global feed handler" (set per db).  ATM its server filters only.
-- Add support for a generic id filter in the "global feed handler"
-
-
-Testing using the Jasmine couchapp
-----------------------------------
-
-See the README.md file in the jasmine/ directory
+Test Suite
+----------
 
 
 Usage
 -----
-
-Soon...*gulp*....
 
