@@ -1,4 +1,3 @@
-"use strict";
 /*  AMD Module: Couchbone
 
  	A rewrite and simplification of jquery.couch.js combined with couch features for backbone.js
@@ -26,15 +25,20 @@
 	
 */
 require.config( {
-    couchbone: {
-        "prefix": "http://localhost:5984"
-    }
+    couchbone: { "prefix": "http://localhost:5984" }
 });
 
 define(["module", "underscore", "jquery", "backbone"], function(module, _, $, Backbone) {
 
+	DELETE  = "DELETE";
+	POST 	= "POST";
+	HEAD	= "HEAD";
+	PUT 	= "PUT";
+	GET 	= "GET";
+
 	Couchbone = {
 		prefix: (module.config().prefix || "http://localhost:5984"),
+		ajax: ax,
 		encodeID: encodeID,
 		session: session,
 		signup: signup,
@@ -47,6 +51,29 @@ define(["module", "underscore", "jquery", "backbone"], function(module, _, $, Ba
 	
 	var flyweights = {};
 	
+	function ax(settings, callbacks, headers) {
+		headers = headers || {}
+		var ax;
+		var callOptions = {
+			dataType    : "json",
+			type		: settings.type || GET,
+			contentType : settings.contentType || "application/json; charset=UTF-8",
+			beforeSend  : function(xhr) {
+				xhr.setRequestHeader("Accept", "application/json");
+				_.each(_.keys(headers), function(hkey) { xhr.setRequestHeader(hkey, headers[hkey]); });
+			}
+		};
+		_.extend(callOptions, _.pick(settings, 'data', 'url'));
+		ax = $.ajax(callOptions);
+		if (callbacks) {
+			if (callbacks.fail || callbacks.error)	{ ax.fail(callbacks.fail ? callbacks.fail : callbacks.error); }
+			if (callbacks.done || callbacks.success) { ax.done(callbacks.done ? callbacks.done : callbacks.success); }
+			if (callbacks.always || callbacks.complete) { ax.always(callbacks.always ? callbacks.always : callbacks.complete); }
+		}
+		return ax;
+	}
+
+	function slash() { return [].join.call(arguments, '/'); }
 	function ripPrefix(options) {
 		var prefix;		
 		if (options['prefix']) {
@@ -76,121 +103,62 @@ define(["module", "underscore", "jquery", "backbone"], function(module, _, $, Ba
 		}
 		return buf.length ? '?' + buf.join('&') : '';
 	}
-	function ajax(obj, options, error_message, ajax_options) {
-		var default_ajax_options = {
-			contentType: "application/json",
-			headers:{"Accept": "application/json"}
-		};
-		options = _.extend({ successStatus: 200 }, options);
-		ajax_options = _.extend(default_ajax_options, ajax_options);
-		error_message = error_message || "Unknown error";
-    	return $.ajax(_.extend(_.extend({
-      		type: "GET", dataType: "json",
-      		beforeSend: function(xhr) {
-				if (ajax_options && ajax_options.headers) {
-					for (var header in ajax_options.headers) {
-						xhr.setRequestHeader(header, ajax_options.headers[header]);
-          			}
-        		}
-      		},
-			complete: function(req) {
-				try {
-					var resp = $.parseJSON(req.responseText);
-				} catch(e) {
-					if (options.error) {
-						options.error(req.status, req, e);
-					} else {
-						console.log(error_message + ": " + e);
-					}
-          			return;
-        		}
-
-				if (options.ajaxStart) {
-					options.ajaxStart(resp);
-				}
-				
-				if (req.status == options.successStatus) {
-					if (options.beforeSuccess) { options.beforeSuccess(req, resp); }
-					if (options.success) { options.success(resp); }
-				} else if (options.error) {
-					options.error(req.status, resp && resp.error || error_message, resp && resp.reason || "no response");
-				} else {
-					console.log(error_message + ": " + resp.reason);
-        		}
-			}
-		}, obj), ajax_options));
-	}
 	function session(prefix, options) {
 		options = options || {};
-		var config = {
-			type: "GET", url: prefix + "/_session", dataType: "json",
-			beforeSend: function(xhr) {
-				xhr.setRequestHeader('Accept', 'application/json');
-			},
-	    	complete: function(req) {
-	      		var resp = $.parseJSON(req.responseText);
-	      		if (req.status == 200) {
-					if (options.success) options.success(resp);
-				} else if (options.error) {
-					options.error(req.status, resp.error, resp.reason);
-				} else {
-					console.log("An error occurred getting session info: " + resp.reason);
-				}
-			}
-		};
-		if (options.username && options.password) {
-			config.type = (options.username === '_' ? 'DELETE' : 'POST');
-			config.data = { name: options.username, password: options.password };
+		prefix = prefix || Couchbone.prefix;
+		var req = { url: prefix + "/_session", type: GET };
+		if (options.name && options.password) {
+			req.type = (options.name === '_' ? DELETE : POST);
+			req.data = { name: options.name, password: options.password };
+			req.contentType = "application/x-www-form-urlencoded; charset=UTF-8";
 		}
-		return $.ajax(config);
+		return ax(req, _.pick(options, 'done', 'fail', 'always', 'success', 'error', 'complete'));
 	}
 	function signup(user_doc, options) {
-		options = options || {};
-		user_doc._id = user_doc._id || user_doc.name;
-		user_doc.type = "user";
-		if (!user_doc.roles) { user_doc.roles = []; }
-		return session(Couchbone.prefix, {
-			success : function(resp) {
-				var db = new Couchbone.DB(resp.info.authentication_db);
-				db.saveDoc(user_doc, options);
-			}
-		});
+		// options = options || {};
+		// user_doc._id = user_doc._id || user_doc.name;
+		// user_doc.type = "user";
+		// if (!user_doc.roles) { user_doc.roles = []; }
+		// return session(Couchbone.prefix, {
+		// 	success : function(resp) {
+		// 		var db = new Couchbone.DB(resp.info.authentication_db);
+		// 		db.saveDoc(user_doc, options);
+		// 	}
+		// });
 	}
-	function login(options) {
+	function login(name, password, options) {
 		options = options || {};
-		return session(ripPrefix(options), options);
+		return session(ripPrefix(options), _.extend(options, { name: name, password: password }));
 	}
 	function logout(options) {
 		options = options || {};
-		return session(ripPrefix(options), _.extend(options, { username : "_", password : "_" }));
+		return session(ripPrefix(options), _.extend(options, { name : "_", password : "_" }));
 	}
-	function sync(method, model, callbacks) { model['couchbone_' + method](callbacks); }
+	function sync(method, model, callbacks) { model['couchbone_' + method](callbacks); }	
 	function getValue(object, prop) {
 		if (!(object && object[prop])) return null;
 		return _.isFunction(object[prop]) ? object[prop]() : object[prop];
 	}
-	function urlError() { throw new Error('This model requires a "url" property or function, or an associated collection with a "db" property or function'); }
-	function tasks(options) {
-		return ajax({ url: ripPrefix(options) + "/_active_tasks"}, options, "Active task status could not be retrieved");
+	function dbConnectionError() {
+		throw new Error("Couchbone.Model requires a 'db' (DbFly) object or must belong to a Couchbone.Collection which has one");
 	}
-	function dbs(options) {		
-		return ajax({ url: ripPrefix(options) + "/_all_dbs" }, options, "An error occurred retrieving the list of all databases");
+	function tasks(options) {
+		return ax({ url: ripPrefix(options) + "/_active_tasks"}, _.pick(options, 'done', 'fail', 'always', 'success', 'error', 'complete'));
+	}
+	function dbs(options) {
+		return ax({ url: ripPrefix(options) + "/_all_dbs" }, _.pick(options, 'done', 'fail', 'always', 'success', 'error', 'complete'));
 	}
 	function config(options, section, option, value) {
-		var req = {
-			url: ripPrefix(options) + "/_config/" + 
-				(section ? encodeURIComponent(section) + '/' + (option ? encodeURIComponent(option) : '') : '')
-		}
-  
+		var req = {	url: ripPrefix(options) + "/_config/" + 
+			(section ? encodeURIComponent(section) + '/' + (option ? encodeURIComponent(option) : '') : '')
+		};
 		if (value === null) {
-			req.type = "DELETE";
+			req.type = DELETE;
 		} else if (value !== undefined) {
-			req.type = "PUT";
+			req.type = PUT;
 			req.data = stringify(value);
-			req.contentType = "application/json";
-			req.processData = false
 		}
-		return ajax( req, options, "An error occurred retrieving/updating the server configuration" );
+		return ax(req, _.pick(options, 'done', 'fail', 'always', 'success', 'error', 'complete'));
 	}
 
 	Couchbone.ChangesFeed = function(db_or_uri, feed_options) {
@@ -206,9 +174,7 @@ define(["module", "underscore", "jquery", "backbone"], function(module, _, $, Ba
 		}
 
 		function getChangesSince() {
-			ajax({ url: self.db.uri() + '/_changes' + encodeOptions(feed_options) },
-				 { success: changesSuccess, error: changesError },
-				'Error connecting to /_changes');
+			return ax({ url: self.db.uri('/_changes') + encodeOptions(feed_options) }, { done: changesSuccess, fail: changesError });
         }
 
 		function changesSuccess(resp) {
@@ -230,7 +196,7 @@ define(["module", "underscore", "jquery", "backbone"], function(module, _, $, Ba
 
 		_.extend(feed_options, { heartbeat : 10000, feed : 'longpoll' });	
 		this.db.info({
-			success : function(info) {
+			done : function(info) {
 				feed_options.since = info.update_seq;
 				getChangesSince();
 			}
@@ -238,190 +204,118 @@ define(["module", "underscore", "jquery", "backbone"], function(module, _, $, Ba
 
 	}
 
-	Couchbone.ChangesFeed.prototype = {	
+	Couchbone.ChangesFeed.prototype = {
 		addHandler: function(fun) { this.handlers.push(fun); return this; },
 		stop : function() { this.active = false; },
 	}
 	
 	Couchbone.DbFly = function(uri) {
 		var _uri = uri;
-		this.uri = function() { return _uri; }
+		this.uri = function(postfix) { return (postfix ? _uri + postfix : _uri); }
 	};
 	
 	Couchbone.DbFly.prototype = {
 		
-        info: function(options) {
-			return ajax({ url: this.uri() }, options, "Database information could not be retrieved");
+        info: function(callbacks) {
+			return ax({ url: this.uri() }, callbacks);
         },
 
-        get: function(id, options, ajax_options) {
-			options = options || {};
-			ajax( 
-				{ url: (options.show || this.uri()) + encodeID(id) + encodeOptions(options) },
-				options,
-				"The document could not be retrieved",
-				ajax_options
-			);
-        },
-
-        save: function(doc, options) {
-			options = options || {};
-			var method = "POST";
-			var url = options.update || this.uri();
-			var beforeSend;
-			if (typeof options.ensure_full_commit !== "undefined") {
-				var commit = options.ensure_full_commit;
-				delete options.ensure_full_commit;
-				beforeSend = function(xhr) {
-					xhr.setRequestHeader('Accept', 'application/json');
-					xhr.setRequestHeader("X-Couch-Full-Commit", commit.toString());
-				};
-			}
-			
-			// FROM jquery.couch.db:  updateDoc: function(updateFun, doc_id, options, ajaxOptions) { var type = 'PUT'; //.... }
-			// beforeSend: function(xhr) { xhr.setRequestHeader('Accept', '*/*'); }, // use this with UPDATE urls?
-			
-			if (doc._id !== undefined) {
-				method = "PUT";
-				url += '/' + encodeID(doc._id);
-			}
-					
-			$.ajax({
-				
-				url: url + encodeOptions(options),
-				type: method, 
-				data: stringify(doc),
-            	dataType: "json", 
-				contentType: "application/json",
-
-            	beforeSend : beforeSend,
-            	complete: function(req) {
-					var resp = $.parseJSON(req.responseText);
-					if (req.status == 200 || req.status == 201 || req.status == 202) {
-						doc._id = resp.id;
-						doc._rev = resp.rev;
-						if (options.success) { options.success(resp); }
-					} else if (options.error) {
-						options.error(req.status, resp.error, resp.reason);
-					} else {
-						console.log("The document could not be saved: ", resp.reason);
-						
-					}
-				}
-
-			});
-
+		head: function(id, callbacks) {
+			return ax({ type: HEAD, url: this.uri() + '/' + encodeID(id) }, callbacks);
 		},
 
-        remove: function(doc, options) {
-          return ajax(
-			{ type: "DELETE", url: this.uri() + encodeID(doc._id) + encodeOptions({rev: doc._rev}) },
-            options,
-            "The document could not be deleted"
-          );
+        get: function(id, settings, callbacks) {
+			settings = settings || {};
+			// TODO: handle _show properly
+			// TODO: hand _pick settings
+			return ax({ url: (settings.show || this.uri()) + '/' + encodeID(id) + encodeOptions(settings) }, callbacks);
         },
 
-		removeAttachment: function(doc, attachment_name, options) {
-          return ajax(
-			{ type: "DELETE", url: this.uri() + encodeID(doc._id) + '/' + attachment_name + encodeOptions({rev: doc._rev}) },
-            options,
-            "The document could not be deleted"
-          );
+        save: function(doc, settings, callbacks) {
+			options = options || {};
+			var req = { url: settings.update || this.uri(), type: POST, data: stringify(doc) };
+			var headers = {};
+
+			//TODO: handle _update properly
+			// type = 'PUT'; //.... }
+			// xhr.setRequestHeader('Accept', '*/*');
+			if (!_.isUndefined(options.ensure_full_commit)) {
+				headers["X-Couch-Full-Commit"] = options.ensure_full_commit.toString();
+			}
+			if (!_.isUndefined(doc._id)) {
+				req.type = PUT;
+				req.url += '/' + encodeID(doc._id);
+			}
+			return ax(req, callbacks, headers);			
 		},
 
-		view: function(view, options, ajax_options) {
-			var view = name.split('/'),
-				options = options || {},
-				type = "GET",
-				data = null,
-				keys = null,
-				url  = this.uri();
-			
-			if (options["keys"]) {
-				type = "POST";
-				keys = options["keys"];
-				delete options["keys"];
-				data = stringify({ "keys": keys });
-			}
+        remove: function(doc) {
+			return ax({ type: DELETE, url: slash(this.uri(), encodeID(doc._id)) + encodeOptions({ rev: doc._rev }) });
+        },
 
-			// CHECK: can we use a list from a different design doc to the view?
-			if (options["list"]) {
-				url += '_design/' + view[0] + '/_list/' + options["list"] + '/' + view[1];
-				delete options["list"];
+		removeAttachment: function(doc, att) {
+			return ax({ type: DELETE, url: slash(this.uri(), encodeID(doc._id), att) + encodeOptions({ rev: doc._rev }) });
+		},
+
+		view: function(view, settings, callbacks) {
+			settings = settings || {};
+			var req = { url: this.uri('/_design/' + view), type: GET };
+			if (settings["keys"]) {
+				req.type = POST;
+				req.data = stringify({ "keys": settings["keys"] });
+			}
+			req.url += encodeOptions(_.pick(settings, 'key', 'startkey', 'startkey_docid', 'endkey', 'endkey_docid', 
+				'limit', 'stale', 'descending', 'skip', 'group', 'group_level', 'reduce', 
+				'include_docs', 'inclusive_end', 'update_seq'));
+			return ax(req, callbacks);
+        },
+
+        allDocs: function(settings, callbacks) {
+			settings = settings || {};
+			var req = { url: this.uri('/_all_docs'), type: GET };
+			
+			if (settings["keys"]) {
+				req.type = POST;
+				req.data = stringify({ "keys": settings["keys"] });
+				req.url += encodeOptions(_.pick(settings, 'include_docs'));
 			} else {
-				url += '_design/' + view[0] + '/_view/' + view[1];
+				req.url += encodeOptions(_.pick(settings, 'include_docs', 'startkey', 'endkey'));
 			}
-			
-			return ajax(
-				{ type: type, data: data, url: url + encodeOptions(options) },
-				options,
-				"An error occurred accessing the view",
-				ajax_options
-			);
-			
+			return ax(req, callbacks);
+        },
+// cb = require("couchbone");
+// v = cb.DB('ww1');
+// resp = { success: function(resp) { console.log("yay:", resp); }, error: function(resp) { console.log("boo:", resp); } }
+// v.allDocs({}, resp);
+// v.allDesignDocs({}, resp);
+
+        allDesignDocs: function(settings, callbacks) {
+			settings = settings || {};
+			return this.allDocs(_.extend({ startkey: "_design", endkey: "_design0" }, settings), callbacks);
         },
 
-		admin: {
+		compact: function(callbacks) {
+			return ax({ type: POST, url: this.uri('/_compact') }, callbacks);
+		},
 
-	        allDocs: function(options) {
-				var type = "GET";
-				var data = null;
-				if (options["keys"]) {
-					type = "POST";
-					var keys = options["keys"];
-					delete options["keys"];
-					data = stringify({ "keys": keys });
-				}
-				return ajax(
-					{ type: type, data: data, url: this.uri() + "_all_docs" + encodeOptions(options) },
-					options,
-					"An error occurred retrieving a list of all documents"
-				);
-	        },
+        compactView: function(viewName, callbacks) {
+			return ax({ type: POST, url: this.uri('/_compact/') + viewName }, callbacks);
+        },
 
-	        allDesignDocs: function(options) {
-				return this.allDocs(_.extend({startkey:"_design", endkey:"_design0"}, options));
-	        },
+        viewCleanup: function(callbacks) {
+			return ax({ type: POST, url: this.uri('/_view_cleanup') }, callbacks);
+        },
 
+        create: function(callbacks) {
+			return ax({ type: PUT, url: this.uri() }, callbacks);
+        },
 
-			compact: function(options) {
-				return ajax(
-					{ type: "POST", url: this.uri() + "_compact", data: "", processData: false },
-					_.extend(options, { successStatus: 202 }),
-					"The database could not be compacted"
-				);
-			},
-
-	        viewCleanup: function(options) {
-				return ajax(
-					{ type: "POST", url: this.uri() + "_view_cleanup", data: "", processData: false },
-					_.extend(options, {successStatus: 202}),
-					"The views could not be cleaned up"
-				);
-	        },
-
-	        compactView: function(groupname, options) {
-				return ajax(
-					{ type: "POST", url: this.uri() + "_compact/" + groupname, data: "", processData: false },
-	            	_.extend(options, {successStatus: 202}),
-	            	"The view could not be compacted"
-				);
-	        },
-
-	        create: function(options) {
-				return ajax(
-					{ type: "PUT", url: this.uri(), contentType: "application/json", data: "", processData: false },
-	            	_.extend(options, {successStatus: 201}),
-	            	"The database could not be created"
-				);
-	        },
-
-	        drop: function(options) {
-				return ajax({ type: "DELETE", url: this.uri() }, options, "The database could not be deleted");
-	        }
-		}
+        drop: function(callbacks) {
+			return ax({ type: DELETE, url: this.uri() }, callbacks);
+        }
 
 	};
+
 
 	// DbFly flyweight factory
 	Couchbone.DB = function(name) {
@@ -441,18 +335,32 @@ define(["module", "underscore", "jquery", "backbone"], function(module, _, $, Ba
 	};
 	
 	if (Backbone.Model) {
+
+
 		Couchbone.Model = Backbone.Model.extend({
+
 			idAttribute: '_id',
 			sync: sync,
+			db: null,		
+			
+			constructor: function(attributes, options) {
+				Backbone.Model.prototype.constructor.call(this, attributes, options);
+				if (options && options.db) this.db = options.db;
+			},
+
 			url: function() {
-				var base = getValue(this, 'urlRoot') || getValue(this.collection, 'db') || urlError();
+				var base;
+				db = db || getValue(this.collection, 'db') || dbConnectionError()
+				base = db.uri();
 				if (this.isNew()) return base;
       			return base + (base.charAt(base.length - 1) == '/' ? '' : '/') + encodeURIComponent(this.id);
 			},
 			
 			couchbone_read: function(callbacks) {
 				var options = {};
-				this.db.get(this.attributes.id, _.pick(_.extend(options, callbacks), 'show', 'rev', 'revs_info', 'success', 'error'));
+				// console.log("aaa:", callbacks, this.attributes.id);
+				//TODO: 'show', 'rev', 'revs_info',
+				this.db.get(this.attributes.id, options, callbacks);
 			},
 			
 			couchbone_update: function(callbacks) {
@@ -468,56 +376,61 @@ define(["module", "underscore", "jquery", "backbone"], function(module, _, $, Ba
 
 			couchbone_create: function(callbacks) { couchbone_update(callbacks); }
 
-		});
-		Couchbone.Model.extend = Backbone.Model.extend;
+		});		
+
 	}
 	
 	if (Backbone.Collection) {
-		var collection_def = Couchbone.Collection = function(models, options) {
-			options || (options = {});
-			if (options.db) {
-				this.db = Couchbone.DB(options.db);
-			}
-			if (options.model) this.model = options.model;
-			if (options.comparator) this.comparator = options.comparator;
-			this._reset();
-			this.initialize.apply(this, arguments);
-			if (models) this.reset(models, {silent: true, parse: options.parse});
-			if (options.changes) {
-				if (this.db) {
-					couchboneFeedSubscribe(options.changes);
-				} else {
-					throw('Error: No database has been established for collection in order to start changes feed.');
-				}
-			}
-		}
-	
-		Couchbone.Collection.prototype = Backbone.Collection.prototype;
-		Couchbone.Collection.extend = Backbone.Collection.extend;
 		
-		_.extend(Couchbone.Collection, {
+		Couchbone.Collection = Backbone.Collection.extend({
+			
 			model: Couchbone.Model,
 			sync: sync,
-			couchbone_read: function() {
-				var options = {};
-				// _.pick(options, 'limit', 'skip', 'startkey', 'startkey_docid', 'endkey', 'endkey_docid', 'include_docs', 'success', 'error', 'keys');
+			db: null,
+
+			constructor: function(models, options) {
+
+				Backbone.Collection.prototype.constructor.call(this, models, options);
 				
-			    _.extend(options, {
-					success: function(response) {
-						callbacks.success(_.map(response.rows, function(row) { row.doc }));
-					},
-					error: function(response) {
-						callbacks.error(response);
+				if (options) {
+					if (options.db) {
+						if (options.db instanceof Couchbone.DbFly) {
+							this.db = options.db;
+						} else {
+							this.db = Couchbone.DB(options.db);
+						}
 					}
-				});
-    
-			    if (options.view) {
-					this.db.view(options.view, options); 
+
+					if (options.changes) {
+						if (this.db) {
+							couchboneFeedSubscribe(options.changes);
+						} else {
+							throw('Error: No database has been established for collection in order to start changes feed.');
+						}
+					}
+					if (options.view) this.view = options.view;
+					if (options.list) this.view = options.list;
+				}
+			},
+		
+			couchbone_read: function(callbacks) {
+				var options = {};
+				//TODO: options -> 'limit', 'skip', etc ....
+			    if (this.view) {
+					this.db.view(this.view, options, {
+						done: function(result) {
+							callbacks.success(_.map(result.rows, function(row) { return row.doc; }));
+						},
+						fail: function(result) {
+							callbacks.error(result);
+						}						
+					});
 			    } else {
 					throw('Must set "view" (and optionally "list") in {couch_options} for collection');
 				}
 			},
-			couchboneHandleChanges: function() {
+			couchboneHandleChanges: function(results) {
+				
 				if (model = this.get(result.id)) {
 					if (result.deleted) {
 						this.remove(model);
@@ -537,22 +450,15 @@ define(["module", "underscore", "jquery", "backbone"], function(module, _, $, Ba
 				}
 			},
 			couchboneFeedSubscribe: function(changes) {
-				feed_options = {
-					filter: changes.filter,
-					params: (changes.params || {}),
-					handler: (changes.handler || this.couchboneHandleChanges),
-					include_docs: (changes.handler ? (changes.include_docs || false) : true)
-				};
-				this.db.subscribeToChangesFeed(feed_options);
+				if (changes instanceof Couchbone.ChangesFeed) {
+					return changes.addHandler(this.couchboneHandleChanges);
+				} else {
+					return (new ChangesFeed(this.db, changes)).addHandler(this.couchboneHandleChanges);
+				}
 			}
+
 		});
-		Couchbone.CompositeCollection = collection_def.extend({ 
-			odm: {},
-			couchbone_read: function() {
-				// _.pick(options, 'limit', 'skip', 'startkey', 'startkey_docid', 'endkey', 'endkey_docid', 'include_docs', 'success', 'error', 'keys');
-			}			
-		});
-		Couchbone.CompositeCollection.extend = Backbone.Collection.extend;
+	
 	}
 	
 	return Couchbone;
